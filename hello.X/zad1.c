@@ -1,4 +1,4 @@
-// PIC24FJ128GA010 Configuration Bit Settings
+// PIC24FJ128GA010
 // CONFIG2
 #pragma config POSCMOD = XT 
 #pragma config OSCIOFNC = ON 
@@ -31,13 +31,12 @@ int f8(void);
 int f9(void);
 unsigned char helper9(unsigned char seed);
 
-// Debouncing function
 bool isButtonPressedDebounced(BUTTON button) {
     if (BUTTON_IsPressed(button)) {
-        __delay32(300000); // ok. 10 ms opó?nienia (dla 30 MIPS)
+        __delay32(300000); 
         if (BUTTON_IsPressed(button)) {
-            while (BUTTON_IsPressed(button)); // Czekaj a? przycisk zostanie puszczony
-            __delay32(300000); // kolejne 10 ms
+            while (BUTTON_IsPressed(button)); 
+            __delay32(300000);
             return true;
         }
     }
