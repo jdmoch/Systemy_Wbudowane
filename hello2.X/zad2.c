@@ -4,7 +4,6 @@
 #pragma config FCKSM = CSDCMD
 #pragma config FNOSC = FRC
 #pragma config IESO = OFF
-
 #pragma config WDTPS = PS32768
 #pragma config FWPSA = PR128
 #pragma config WINDIS = ON
@@ -57,40 +56,51 @@ uint16_t read_pot() {
 }
 
 void snake_pattern() {
-    static uint8_t led = 0b00000001;
-    static int direction = 1;
+    static uint8_t segment = 0b00000111;
+    static int8_t direction = 1;
 
     pot_value = read_pot();
-    LATA = led;
+    LATA = segment;
     delay();
 
-    if (direction) {
-        led <<= 1;
-        if (led == 0b10000000) direction = 0;
+    if (direction > 0) {
+        segment <<= 1;
+        if (segment > 0b01111000) {
+            segment = 0b11100000;
+            direction = -1;
+        }
     } else {
-        led >>= 1;
-        if (led == 0b00000001) direction = 1;
+        segment >>= 1;
+        if (segment < 0b00000111) {
+            segment = 0b00001110;
+            direction = 1;
+        }
     }
 }
 
-void random_led_pattern() {
+void countdown_pattern() {
+    static uint8_t value = 255;
+
     pot_value = read_pot();
-    LATA = rand() % 256;
+    LATA = value;
     delay();
+
+    if (value == 0) value = 255;
+    else value--;
 }
 
 int main() {
     TRISA = 0x0000;
     LATA = 0;
     adc_init();
-    init_buttons();  // Zak?adam, ?e masz buttons.c/.h
+    init_buttons(); 
 
     while (1) {
-        update_mode(&mode);  // Zwi?ksza/zmniejsza tryb na podstawie przycisków
+        update_mode(&mode);  
 
         switch (mode) {
             case 0: snake_pattern(); break;
-            case 1: random_led_pattern(); break;
+            case 1: countdown_pattern(); break;
             default: mode = 0; break;
         }
     }
