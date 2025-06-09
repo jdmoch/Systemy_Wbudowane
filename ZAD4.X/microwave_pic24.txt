@@ -1,0 +1,187 @@
+#pragma config POSCMOD = XT
+#pragma config OSCIOFNC = ON
+#pragma config FCKSM = CSDCMD
+#pragma config FNOSC = PRI
+#pragma config IESO = ON
+#pragma config WDTPS = PS32768
+#pragma config FWPSA = PR128
+#pragma config WINDIS = ON
+#pragma config FWDTEN = OFF
+#pragma config ICS = PGx2
+#pragma config GWRP = OFF
+#pragma config GCP = OFF
+#pragma config JTAGEN = OFF
+
+#include <xc.h>
+#include <libpic30.h>
+#include <stdio.h>
+#include <string.h>
+#include "lcd.h"
+
+#define FCY 4000000UL
+
+#define BTN_DODAJ_MIN       PORTBbits.RB0    
+#define BTN_DODAJ_10S       PORTBbits.RB1    
+#define BTN_START_STOP      PORTBbits.RB2    
+
+#define GOTOWY         0
+#define GOTOWANIE      1
+#define ZATRZYMANY     2
+#define OPOZNIENIE_PRZYCISKU     200
+#define OPOZNIENIE_ODSWIEZANIA   100
+#define OPOZNIENIE_SEKUNDY       1000
+
+volatile unsigned int pozostale_sekundy = 0;
+volatile uint8_t stan = GOTOWY;
+volatile unsigned int licznik = 0;
+
+volatile bool flaga_min = false;
+volatile bool flaga_sek = false;
+volatile bool flaga_start_stop = false;
+
+void opoznienie(unsigned int ms) {
+    while (ms--) {
+        __delay32(FCY / 1000);
+    }
+}
+
+void czas() {
+    char bufor[17];
+    unsigned char minuty = pozostale_sekundy / 60;
+    unsigned char sekundy = pozostale_sekundy % 60;
+    
+    sprintf(bufor, "Czas: %02u:%02u", minuty, sekundy);
+    LCD_ClearScreen();
+    LCD_PutString(bufor, strlen(bufor));
+}
+
+void komunikat(const char* komunikat) {
+    LCD_ClearScreen();
+    LCD_PutString(komunikat, strlen(komunikat));
+}
+
+void porty() {
+    
+    TRISBbits.TRISB0 = 1;   
+    TRISBbits.TRISB1 = 1;   
+    TRISBbits.TRISB2 = 1;   
+    
+    CNPU1bits.CN2PUE = 1;   
+    CNPU1bits.CN3PUE = 1;   
+    CNPU1bits.CN4PUE = 1;   
+}
+
+void konfiguruj_przerwania() {
+    
+    INTCON2bits.INT0EP = 1;  
+    IFS0bits.INT0IF = 0;    
+    IEC0bits.INT0IE = 1;     
+    
+    INTCON2bits.INT1EP = 1;  
+    IFS1bits.INT1IF = 0;     
+    IEC1bits.INT1IE = 1;     
+    
+    INTCON2bits.INT2EP = 1;  
+    IFS1bits.INT2IF = 0;     
+    IEC1bits.INT2IE = 1;     
+}
+
+void inicjalizacja() {
+    porty();
+    konfiguruj_przerwania();
+    LCD_Initialize();
+    komunikat("Mikrofala Gotowa");
+    opoznienie(1000);
+    czas();
+}
+
+void __attribute__((__interrupt__, __auto_psv__)) _INT0Interrupt(void) {
+    opoznienie(50);  
+    if (BTN_DODAJ_MIN == 0) { 
+        flaga_min = true;
+    }
+    IFS0bits.INT0IF = 0;  
+}
+
+void __attribute__((__interrupt__, __auto_psv__)) _INT1Interrupt(void) {
+    opoznienie(50); 
+    if (BTN_DODAJ_10S == 0) {  
+        flaga_sek = true;
+    }
+    IFS1bits.INT1IF = 0;  
+}
+
+void __attribute__((__interrupt__, __auto_psv__)) _INT2Interrupt(void) {
+    opoznienie(50);  
+    if (BTN_START_STOP == 0) {  
+        flaga_start_stop = true;
+    }
+    IFS1bits.INT2IF = 0;  
+}
+
+void obsluz_przyciski() {
+    if (flaga_min) {
+        pozostale_sekundy += 60;
+        if (pozostale_sekundy > 3600) pozostale_sekundy = 3600;
+        czas();
+        flaga_min = false;
+        opoznienie(OPOZNIENIE_PRZYCISKU);
+    }
+    
+    if (flaga_sek) {
+        pozostale_sekundy += 10;
+        if (pozostale_sekundy > 3600) pozostale_sekundy = 3600;
+        czas();
+        flaga_sek = false;
+        opoznienie(OPOZNIENIE_PRZYCISKU);
+    }
+    
+    if (flaga_start_stop) {
+        if (pozostale_sekundy > 0) {
+            if (stan == GOTOWY || stan == ZATRZYMANY) {
+                stan = GOTOWANIE;
+                licznik = 0;
+                komunikat("Dzialanie...");
+                opoznienie(800);
+            } else if (stan == GOTOWANIE) {
+                stan = ZATRZYMANY;
+                komunikat("Zatrzymano");
+                opoznienie(800);
+                czas();
+            }
+        }
+        flaga_start_stop = false;
+        opoznienie(OPOZNIENIE_PRZYCISKU);
+    }
+}
+
+void gotowanie() {
+    if (stan == GOTOWANIE && pozostale_sekundy > 0) {
+        licznik += OPOZNIENIE_ODSWIEZANIA;
+        
+        if (licznik >= OPOZNIENIE_SEKUNDY) {
+            pozostale_sekundy--;
+            licznik = 0;
+            czas();
+            
+            if (pozostale_sekundy == 0) {
+                stan = GOTOWY;
+                komunikat("Koniec");
+                opoznienie(2000);
+                czas();
+            }
+        }
+    }
+}
+
+int main(void) {
+    inicjalizacja();
+    
+    while (1) {
+        obsluz_przyciski();
+        gotowanie();
+        opoznienie(OPOZNIENIE_ODSWIEZANIA);
+    }
+    
+    return 0;
+}
